@@ -66,7 +66,7 @@ flowchart LR
 | **Acervo** (repositório de dados) | Memórias em markdown; `main` validada, `inbox` pendente; `.teammem.yaml` com a política; CODEOWNERS |
 | **Pacote `teammem`** (Python) | MCP (stdio), CLI, curador determinístico, instalador multi-harness, gerador do bloco do AGENTS.md |
 | **Clone local** (`~/.teammem/<acervo>/`) | `main/` (clone), `inbox/` (worktree da branch inbox), `index.sqlite`, fila offline |
-| **Bloco no AGENTS.md** | Instrução de uso e memórias `pinned` |
+| **Bloco de instruções** | No nível do usuário: instrução de uso + `pinned` amplas. No AGENTS.md do projeto: só as `pinned` do projeto |
 | **Skill `/learn`** | Fluxo guiado para registrar um aprendizado (Claude Code e Devin CLI) |
 
 ### 4.2 Fluxos
@@ -93,21 +93,48 @@ flowchart LR
 **Manutenção mensal**
 - `teammem stale` lista memórias com `review_by` vencido, que são revalidadas, atualizadas ou substituídas.
 
-## 5. Harnesses do time
+## 5. Harnesses do time e instalação
 
-| Harness | Leitura | Escrita | Config de MCP no projeto |
+### 5.1 O que é feito onde
+
+| Quando | Quem | O quê | Comando |
 |---|---|---|---|
-| Devin CLI | AGENTS.md + MCP | MCP `propose` + skill `/learn` | `.devin/mcp_config.json` (`mcpServers`) |
-| Claude Code | AGENTS.md (via `@AGENTS.md` no CLAUDE.md) + MCP | MCP `propose` + skill `/learn` | `.mcp.json` (`mcpServers`) |
-| GitHub Copilot (VS Code, agent mode) | AGENTS.md + MCP | MCP `propose` | `.vscode/mcp.json` (`servers`, `type: stdio`) |
+| Uma vez | Rodrigo | Criar o acervo no git corporativo | `teammem init <clone> --profile work` |
+| **Uma vez por máquina** | Cada membro | MCP, skill `/learn` e instruções globais | `teammem install --user --harness devin claude copilot` |
+| Por projeto, só se houver críticas próprias | Quem cuida do projeto | Bloco com as `pinned` do projeto no AGENTS.md (commitado) | `teammem agents-md` |
 
-O comando `teammem install --harness devin claude copilot` escreve as três
-configurações de forma idempotente, copia a skill `/learn` e atualiza o
-AGENTS.md. Se um arquivo de configuração tiver comentários (JSONC), o instalador
-não sobrescreve: ele devolve o trecho para colar manualmente.
+Não há instalação por projeto: o MCP fica no nível do usuário e descobre o
+projeto pela pasta git onde o harness o inicia. Isso também evita commitar
+config de MCP nos repositórios dos projetos.
 
-> ⚠️ Os formatos de configuração dessas ferramentas mudam com frequência.
-> Valide cada um na versão em uso no time antes do rollout (Fase 1, tarefa 1.6).
+### 5.2 Onde cada harness é configurado (nível de usuário)
+
+| Harness | MCP | Instruções globais | Skill `/learn` |
+|---|---|---|---|
+| Devin CLI | `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\` no Windows) | lê `~/.claude/CLAUDE.md` | `~/.agents/skills/` |
+| Claude Code | `claude mcp add-json -s user` | `~/.claude/CLAUDE.md` | `~/.claude/skills/` |
+| GitHub Copilot (VS Code) | `mcp.json` do perfil padrão (`servers`, `type: stdio`) | `~/.copilot/copilot-instructions.md` | — |
+
+Para os três harnesses do time, o bloco de instruções vai em dois arquivos:
+`~/.claude/CLAUDE.md` (lido pelo Claude Code e pelo Devin CLI) e
+`~/.copilot/copilot-instructions.md`. O bloco contém a instrução de uso e as
+memórias `pinned` de escopo amplo (team/org/global), e é delimitado por
+marcadores com o nome do acervo. Assim, o acervo do trabalho e um eventual
+acervo particular convivem no mesmo arquivo.
+
+O instalador é idempotente e não sobrescreve arquivos que não consegue
+interpretar (JSON com comentários): devolve o trecho para colar manualmente.
+
+> ⚠️ Os caminhos e formatos dessas ferramentas mudam com frequência (foram
+> confirmados na documentação oficial em out/2026). Valide cada um na versão em
+> uso no time antes do rollout (Fase 1, tarefa 1.6). Perfis não padrão do
+> VS Code têm o `mcp.json` em outra pasta (**MCP: Open User Configuration**).
+
+### 5.3 Quando atualizar
+
+- **Nova `pinned` ampla mergeada:** cada membro roda `teammem agents-md --user` (ou o curador avisa no PR).
+- **Nova `pinned` de projeto mergeada:** quem cuida do projeto roda `teammem agents-md` e commita o AGENTS.md.
+- **Nova versão do pacote:** cada membro roda `teammem install --user --source "teammem==X.Y.Z"`.
 
 ## 6. Particular × trabalho
 
@@ -143,13 +170,13 @@ Revisão incremental: cada fase termina com uma revisão do time antes de seguir
 
 | # | Tarefa |
 |---|---|
-| 1.1 | Criar o repositório do acervo no git corporativo (`teammem init <dir> --profile work`): proteção da `main`, CODEOWNERS com os 4 membros |
+| 1.1 | Criar o repositório do acervo no git corporativo, cloná-lo e rodar `teammem init . --profile work` dentro do clone: proteção da `main`, CODEOWNERS com os 4 membros |
 | 1.2 | Popular o acervo com 10 a 20 memórias semente (armadilhas conhecidas do time), já via PR |
 | 1.3 | Publicar o pacote no registry interno (build com `uv build`; versão fixa) |
 | 1.4 | Implementar ou adotar: schema, store (clone, worktree inbox, sync com throttle, fila offline), índice FTS5, safety e o MCP com `list_index`, `read`, `search` e `propose` |
-| 1.5 | `teammem install` para Devin CLI, Claude Code e Copilot, mais `teammem doctor` |
-| 1.6 | **Validar o formato de config de MCP** de cada harness na versão em uso |
-| 1.7 | Gerar o bloco do AGENTS.md nos projetos piloto (2 projetos) |
+| 1.5 | `teammem install --user` para Devin CLI, Claude Code e Copilot, mais `teammem doctor` (uma vez por máquina) |
+| 1.6 | **Validar os caminhos e formatos de config** de cada harness na versão em uso (§5.2) |
+| 1.7 | Nos 2 projetos piloto, registrar as `pinned` de projeto e gerar o bloco com `teammem agents-md` |
 
 **Critérios de pronto**
 - [ ] `doctor` passa nas 4 máquinas.
@@ -241,12 +268,18 @@ Em ambas, os requisitos de distribuição são os mesmos:
 ## Apêndice A — Comandos de referência
 
 ```bash
-# Criar o acervo (uma vez)
-teammem init team-memory --profile work
+# Criar o acervo (uma vez, dentro do clone do repositório do acervo)
+teammem init . --profile work
 
-# Configurar um projeto (cada dev, em cada projeto)
-teammem install --repo <url-git-interno-do-acervo> \
+# Instalar na máquina (cada dev, uma vez)
+teammem install --user --repo <url-git-interno-do-acervo> --name trabalho \
   --source "teammem==0.1.0" --harness devin claude copilot
+
+# Críticas de um projeto (só se houver pinned do projeto; commitar o AGENTS.md)
+teammem agents-md --repo <url> --name trabalho
+
+# Atualizar as instruções globais após nova pinned ampla
+teammem agents-md --user --repo <url> --name trabalho --harness devin claude copilot
 
 # Diagnóstico
 teammem doctor --repo <url>

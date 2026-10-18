@@ -58,10 +58,20 @@ class Service:
         return self.index.search(query, project=project or self.cfg.project, scope=scope,
                                  type=type, limit=limit)
 
-    def pinned(self, project: str | None = None) -> list[Memory]:
+    def pinned(self, project: str | None = None, kind: str = "all") -> list[Memory]:
+        """kind: 'all' (amplas + do projeto), 'broad' (global/team/org) ou 'project'."""
         self.refresh()
         project = project or self.cfg.project
-        return [m for m in self.store.main_memories() if m.pinned and self._visible(m, project)]
+        out = []
+        for m in self.store.main_memories():
+            if not m.pinned:
+                continue
+            if m.scope == "project":
+                if kind != "broad" and project and m.project == project:
+                    out.append(m)
+            elif kind != "project":
+                out.append(m)
+        return out
 
     # ------------------------------------------------------------ escrita
     def propose(self, *, title: str, body: str, type: str, scope: str = "project",
@@ -73,6 +83,12 @@ class Service:
             return {"status": "recusada", "motivos": scan.blocked}
         if scope == "project":
             project = project or self.cfg.project
+            if not project:
+                return {
+                    "status": "recusada",
+                    "motivos": ["projeto atual não detectado (o MCP não foi iniciado dentro "
+                                "de um repositório git): informe `project` ou use outro scope"],
+                }
         mem = new_memory(
             title=title, body=body, type=type, scope=scope, project=project,
             author=self.cfg.author, source=source, confidence=confidence, tags=tags,

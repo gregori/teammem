@@ -103,65 +103,127 @@ def cmd_stale(a):
           for m in svc.store.main_memories() if curator.stale(m)])
 
 
+def _harnesses(a) -> list[str]:
+    return list(install.HARNESSES) if a.harness == ["all"] else a.harness
+
+
+def _update_user_instructions(svc, harnesses: list[str], server: str) -> dict:
+    """Bloco de uso + pinned amplas nos arquivos de instrução globais."""
+    pol = curator.policy_with_defaults(svc.store.policy())
+    block = agentsmd.render(svc.pinned(kind="broad"), svc.cfg.name, server, pol["pinned_max"])
+    files, notes = install.instruction_targets(harnesses, install.UserPaths.detect())
+    return {
+        "arquivos": {str(f): ("atualizado" if agentsmd.write(f, block, svc.cfg.name)
+                              else "inalterado") for f in files},
+        "notas": notes,
+    }
+
+
+def _update_project_agents_md(svc, path: Path, server: str, full: bool) -> str:
+    """No projeto: só as pinned do projeto (ou o bloco completo, com --full)."""
+    pol = curator.policy_with_defaults(svc.store.policy())
+    name = svc.cfg.name
+    if full:
+        block = agentsmd.render(svc.pinned(), name, server, pol["pinned_max"])
+    else:
+        pinned = svc.pinned(kind="project")
+        if not pinned:
+            return "removido" if agentsmd.remove(path, name) else "sem pinned do projeto"
+        block = agentsmd.render(pinned, name, server, pol["pinned_max"],
+                                include_instructions=False)
+    return "atualizado" if agentsmd.write(path, block, name) else "inalterado"
+
+
 def cmd_agents_md(a):
     svc = _svc(a)
-    svc.refresh()
-    pol = curator.policy_with_defaults(svc.store.policy())
-    block = agentsmd.render(svc.pinned(), svc.cfg.name, a.server or f"teammem-{svc.cfg.name}",
-                            pol["pinned_max"])
-    if a.stdout:
-        print(block)
+    svc.refresh(force=True)
+    server = a.server or f"teammem-{svc.cfg.name}"
+    if a.user:
+        _out(_update_user_instructions(svc, _harnesses(a), server))
+    elif a.stdout:
+        pol = curator.policy_with_defaults(svc.store.policy())
+        print(agentsmd.render(svc.pinned(), svc.cfg.name, server, pol["pinned_max"]))
     else:
-        changed = agentsmd.write(Path(a.path), block)
-        print(f"{a.path}: {'atualizado' if changed else 'inalterado'}")
+        print(f"{a.path}: {_update_project_agents_md(svc, Path(a.path), server, a.full)}")
 
 
 def cmd_install(a):
-    cfg = _cfg(a)
-    pdir = Path(a.project_dir).resolve()
-    harnesses = install.HARNESSES if a.harness == ["all"] else a.harness
-    server = a.server or f"teammem-{cfg.name}"
-    res = {"mcp": install.install(list(harnesses), project_dir=pdir, repo=cfg.repo,
-                                  name=cfg.name, source=a.source, server=server)}
-    if not a.no_skill:
-        res["skills"] = install.install_skill(pdir, list(harnesses))
-    if not a.no_agents_md:
-        from .service import Service
+    from .service import Service
 
+    cfg = _cfg(a)
+    harnesses = _harnesses(a)
+    server = a.server or f"teammem-{cfg.name}"
+    pdir = None if a.user else Path(a.project_dir).resolve()
+    res: dict = {"modo": "usuário" if a.user else f"projeto ({pdir})"}
+    res["mcp"] = install.install(harnesses, project_dir=pdir, user=a.user, repo=cfg.repo,
+                                 name=cfg.name, source=a.source, server=server)
+    if not a.no_skill:
+        res["skills"] = install.install_skill(harnesses, project_dir=pdir, user=a.user)
+    if not a.no_instructions:
         svc = Service(cfg)
         svc.refresh(force=True)
-        pol = curator.policy_with_defaults(svc.store.policy())
-        block = agentsmd.render(svc.pinned(), cfg.name, server, pol["pinned_max"])
-        res["agents_md"] = agentsmd.write(pdir / "AGENTS.md", block)
-        if "claude" in harnesses:
-            res["claude_md_import"] = install.ensure_claude_import(pdir)
+        if a.user:
+            res["instrucoes"] = _update_user_instructions(svc, harnesses, server)
+        else:
+            res["agents_md"] = _update_project_agents_md(svc, pdir / "AGENTS.md", server,
+                                                         full=True)
+            if "claude" in harnesses:
+                res["claude_md_import"] = install.ensure_claude_import(pdir)
     _out(res)
 
 
 def cmd_init(a):
-    """Cria a estrutura de um repositório de memórias (acervo) a partir do template."""
+    """Cria a estrutura de um acervo a partir do template.
+
+    Funciona numa pasta vazia/nova (faz `git init`) ou dentro de um clone
+    existente: nesse caso não recria o .git e não sobrescreve arquivos.
+    """
     dest = Path(a.dir).resolve()
-    if dest.exists() and any(dest.iterdir()):
-        sys.exit(f"{dest} não está vazio")
+    is_clone = (dest / ".git").exists()
+    if dest.exists() and any(dest.iterdir()) and not is_clone:
+        sys.exit(f"{dest} não está vazio e não é um repositório git")
+    dest.mkdir(parents=True, exist_ok=True)
+
+    skip = {".teammem.personal.yaml", ".teammem.work.yaml"}
+    if a.profile == "work":
+        skip.add(".github/workflows/teammem-curate.yml")
+    else:
+        skip.add(".github/CODEOWNERS")
+    created, kept = [], []
+
+    def put(rel: str, content: bytes) -> None:
+        target = dest / rel
+        if target.exists():
+            kept.append(rel)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        created.append(rel)
+
     tpl = resources.files("teammem") / "templates" / "memory-repo"
     with resources.as_file(tpl) as src:
-        shutil.copytree(src, dest, dirs_exist_ok=True)
-    prof = dest / f".teammem.{a.profile}.yaml"
-    (dest / ".teammem.yaml").write_text(prof.read_text(encoding="utf-8"), encoding="utf-8")
-    for p in dest.glob(".teammem.*.yaml"):
-        p.unlink()
-    wf = dest / ".github" / "workflows"
-    if a.profile == "work":
-        shutil.rmtree(wf, ignore_errors=True)
-    else:
-        (dest / ".github" / "CODEOWNERS").unlink(missing_ok=True)
+        for f in sorted(p for p in src.rglob("*") if p.is_file()):
+            rel = f.relative_to(src).as_posix()
+            if rel not in skip:
+                put(rel, f.read_bytes())
+        put(".teammem.yaml", (src / f".teammem.{a.profile}.yaml").read_bytes())
     for d in ("global", "team", "org", "project"):
-        (dest / d).mkdir(exist_ok=True)
-        (dest / d / ".gitkeep").touch()
-    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=dest, check=True)
-    print(f"Acervo criado em {dest} (perfil {a.profile}).\n"
-          "Próximos passos: git add -A && git commit -m 'acervo inicial' && "
-          "git remote add origin <url> && git push -u origin main")
+        if not (dest / d).exists():
+            put(f"{d}/.gitkeep", b"")
+
+    if not is_clone:
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=dest, check=True)
+    print(f"Acervo {'preparado no clone' if is_clone else 'criado'} em {dest} "
+          f"(perfil {a.profile}).")
+    if created:
+        print("Criados: " + ", ".join(created))
+    if kept:
+        print("Mantidos (já existiam): " + ", ".join(kept))
+    if is_clone:
+        print("Próximo passo: git add -A && git commit -m 'estrutura do acervo' && git push")
+    else:
+        print("Próximos passos: git add -A && git commit -m 'acervo inicial' && "
+              "git remote add origin <url> && git push -u origin main")
 
 
 def cmd_doctor(a):
@@ -241,20 +303,28 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--mode", default="pr", choices=["pr", "direct"])
     add("gc", cmd_gc, "limpa a inbox (promovidas e expiradas)")
     add("stale", cmd_stale, "lista memórias com review_by vencido")
-    sp = add("agents-md", cmd_agents_md, "gera/atualiza o bloco do AGENTS.md")
+    harness_help = f"{', '.join(install.HARNESSES)} ou all (padrão)"
+    sp = add("agents-md", cmd_agents_md,
+             "atualiza o bloco de memórias críticas (projeto ou, com --user, global)")
+    sp.add_argument("--user", action="store_true",
+                    help="atualiza as instruções globais (uso + pinned amplas)")
+    sp.add_argument("--harness", nargs="+", default=["all"], help=harness_help)
     sp.add_argument("--path", default="AGENTS.md")
+    sp.add_argument("--full", action="store_true",
+                    help="no projeto, inclui também a instrução de uso e as pinned amplas")
     sp.add_argument("--server")
     sp.add_argument("--stdout", action="store_true")
-    sp = add("install", cmd_install, "configura MCP, skill e AGENTS.md nos harnesses")
-    sp.add_argument("--harness", nargs="+", default=["all"],
-                    help=f"{', '.join(install.HARNESSES)} ou all")
+    sp = add("install", cmd_install, "configura MCP, skill /learn e instruções nos harnesses")
+    sp.add_argument("--user", action="store_true",
+                    help="instala uma vez para o usuário (recomendado); sem isso, no projeto")
+    sp.add_argument("--harness", nargs="+", default=["all"], help=harness_help)
     sp.add_argument("--project-dir", default=".")
     sp.add_argument("--source", default="teammem",
                     help="origem do pacote p/ uvx: 'teammem', 'git+https://…', wheel local")
     sp.add_argument("--server", help="nome do servidor MCP (padrão teammem-<nome>)")
     sp.add_argument("--no-skill", action="store_true")
-    sp.add_argument("--no-agents-md", action="store_true")
-    sp = sub.add_parser("init", help="cria um acervo novo a partir do template")
+    sp.add_argument("--no-instructions", action="store_true")
+    sp = sub.add_parser("init", help="cria um acervo (pasta nova/vazia ou clone existente)")
     sp.add_argument("dir")
     sp.add_argument("--profile", default="personal", choices=["personal", "work"])
     sp.set_defaults(fn=cmd_init)

@@ -22,22 +22,30 @@ Vai além de uma skill: em vez de só estilo e procedimentos, compartilha **apre
 
 ## Início rápido (modo particular)
 
+| Quando | O quê |
+|---|---|
+| Uma vez na vida | Criar o acervo (`init`) |
+| **Uma vez por máquina** | Instalar nos harnesses (`install --user`) |
+| Por projeto, só se houver memórias críticas próprias | `agents-md` |
+
 ```bash
-# 1. Crie o acervo (repositório de dados) e publique-o no GitHub (privado)
-uvx --from git+https://github.com/gregori/teammem teammem init minha-memoria --profile personal
+alias tm='uvx --from git+https://github.com/gregori/teammem teammem'
+
+# 1. Acervo (repositório de dados privado). Se o repositório já existir,
+#    clone-o e rode `tm init . --profile personal` dentro dele.
+tm init minha-memoria --profile personal
 cd minha-memoria && git add -A && git commit -m "acervo inicial"
 gh repo create minha-memoria --private --source . --push
 
-# 2. Em cada projeto, configure os harnesses
-cd ~/projetos/meu-projeto
-uvx --from git+https://github.com/gregori/teammem teammem install \
-    --repo git@github.com:gregori/minha-memoria.git \
-    --source git+https://github.com/gregori/teammem \
-    --harness claude codex opencode cursor
+# 2. Uma vez por máquina: MCP, skill /learn e instruções globais em todos os harnesses
+tm install --user --repo git@github.com:gregori/minha-memoria.git --name pessoal \
+  --source git+https://github.com/gregori/teammem
 
 # 3. Confira
-uvx --from git+https://github.com/gregori/teammem teammem doctor --repo git@github.com:gregori/minha-memoria.git
+tm doctor --repo git@github.com:gregori/minha-memoria.git --name pessoal
 ```
+
+Detalhes, caminhos por harness e o modo por projeto: [docs/USO.md](docs/USO.md).
 
 ## Desenvolvimento
 

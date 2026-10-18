@@ -130,11 +130,20 @@ pinned_max: 15             # teto de memórias críticas no AGENTS.md
 
 Itens que já estão em alguma branch `promote/*` não reaparecem como pendentes.
 
-## 5. Canal estático (AGENTS.md)
+## 5. Canal estático (arquivos de instrução)
 
-Um bloco delimitado por `<!-- teammem:start -->` e `<!-- teammem:end -->`, com:
-- a instrução de uso das tools (`search` antes de decidir, `propose` ao aprender);
-- as memórias `pinned`, até `pinned_max`.
+Um bloco delimitado por `<!-- teammem:<acervo>:start -->` e
+`<!-- teammem:<acervo>:end -->`. O nome do acervo nos marcadores permite que
+acervos diferentes (ex.: particular e trabalho) convivam no mesmo arquivo.
+
+Dois níveis:
+
+| Nível | Onde | Conteúdo |
+|---|---|---|
+| Usuário | arquivos de instrução globais de cada harness (ex.: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`) | instrução de uso das tools (`search` antes de decidir, `propose` ao aprender) + `pinned` de escopo `global`/`team`/`org` |
+| Projeto | `AGENTS.md` do repositório | só as `pinned` daquele projeto; sem `pinned` próprias, não há bloco |
+
+O total de `pinned` em cada bloco respeita `pinned_max`.
 
 **Critério de `pinned`** (todos verdadeiros):
 1. **Sem gatilho:** o agente erraria antes de ter motivo para buscar.

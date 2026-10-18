@@ -105,6 +105,26 @@ def test_agents_md_block(alice, tmp_path):
     assert "Nunca rode migrations" in block
     f = tmp_path / "AGENTS.md"
     f.write_text("# Projeto\n\nregras antigas\n")
-    assert agentsmd.write(f, block)
-    assert not agentsmd.write(f, block)  # idempotente
+    assert agentsmd.write(f, block, "acervo")
+    assert not agentsmd.write(f, block, "acervo")  # idempotente
     assert f.read_text().startswith("# Projeto")
+    # outro acervo convive no mesmo arquivo
+    other = agentsmd.render([], "trabalho", "teammem-trabalho")
+    assert agentsmd.write(f, other, "trabalho")
+    text = f.read_text()
+    assert "Nunca rode migrations" in text and "teammem:trabalho:start" in text
+    assert agentsmd.remove(f, "trabalho") and "trabalho" not in f.read_text()
+
+
+def test_pinned_split(alice):
+    broad = alice.pinned(kind="broad")
+    assert [m.id for m in broad] == ["2026-01-01-ana-migrations"]
+    assert alice.pinned(kind="project") == []
+
+
+def test_propose_without_project_is_refused(alice):
+    alice.cfg.project = None
+    r = alice.propose(title="Sem projeto", body="Teste.", type="gotcha")
+    assert r["status"] == "recusada"
+    r = alice.propose(title="Vale para tudo", body="Teste.", type="gotcha", scope="global")
+    assert r["status"] == "publicada"
