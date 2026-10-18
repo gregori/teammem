@@ -185,7 +185,8 @@ def cmd_doctor(a):
         ok("índice", svc.index is not None, str(cfg.index_path))
         ok("fila offline vazia", svc.store.pending_push() == 0,
            f"{svc.store.pending_push()} commits aguardando push")
-        ok("autor definido", cfg.author, "defina TEAMMEM_AUTHOR ou git config user.name")
+        ok("autor definido", cfg.author,
+           cfg.author or "defina TEAMMEM_AUTHOR ou git config user.name")
     except SystemExit as e:
         ok("repo configurado", False, str(e))
     for c in checks:
