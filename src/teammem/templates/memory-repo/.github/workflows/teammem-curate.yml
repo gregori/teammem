@@ -1,0 +1,37 @@
+# Curadoria automática (perfil particular).
+# Requer: Settings > Actions > General > Workflow permissions =
+#   "Read and write" + "Allow GitHub Actions to create and approve pull requests".
+name: teammem-curate
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # diário
+  push:
+    branches: [inbox]
+  workflow_dispatch:
+
+concurrency:
+  group: teammem-curate
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  curate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: astral-sh/setup-uv@v6
+      - name: Revisão automática da inbox
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEAMMEM_REPO: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          TEAMMEM_NAME: ci
+          TEAMMEM_AUTHOR: teammem-bot
+          # Ajuste a origem do pacote (PyPI, git+https://…, versão fixa).
+          TEAMMEM_SOURCE: ${{ vars.TEAMMEM_SOURCE || 'teammem' }}
+        run: |
+          git config --global user.email "teammem-bot@users.noreply.github.com"
+          git config --global user.name "teammem-bot"
+          uvx --from "$TEAMMEM_SOURCE" teammem review --auto

@@ -1,0 +1,8 @@
+# Política do acervo (perfil particular).
+# Itens que passam nesses critérios entram direto na main como "provisional"
+# quando o CI roda `teammem review --auto`; o resto vira PR.
+auto_scopes: [project, global]
+auto_types: [gotcha, pattern, anti-pattern]
+duplicate_threshold: 0.6
+inbox_ttl_days: 90
+pinned_max: 15

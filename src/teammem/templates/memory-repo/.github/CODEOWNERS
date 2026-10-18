@@ -1,0 +1,7 @@
+# Ajuste os handles para o seu time.
+# Qualquer membro aprova project/; team/ e org/ exigem quem cuida do acervo.
+/project/   @time/membros
+/team/      @time/curadores
+/org/       @time/curadores
+/global/    @time/curadores
+/.teammem.yaml  @time/curadores

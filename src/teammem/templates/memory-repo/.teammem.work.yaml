@@ -1,0 +1,8 @@
+# Política do acervo (perfil trabalho).
+# No trabalho todo merge na main é humano: a classificação "auto" só ordena o
+# lote e sinaliza o que é de baixo risco para o curador da semana.
+auto_scopes: [project]
+auto_types: [gotcha, pattern, anti-pattern]
+duplicate_threshold: 0.6
+inbox_ttl_days: 90
+pinned_max: 15
