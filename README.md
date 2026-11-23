@@ -4,9 +4,13 @@ Memória compartilhada **multi-projeto e multi-harness** para agentes de IA de c
 Vai além de uma skill: em vez de só estilo e procedimentos, compartilha **aprendizados**
 (decisões, armadilhas, convenções, padrões) com **proveniência, curadoria e envelhecimento**.
 
-- **Fonte da verdade:** um repositório git de markdown (o *acervo*). Sem banco, sem servidor.
+- **Fonte da verdade:** um repositório git de markdown (o *acervo*) em formato
+  [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md),
+  com índices gerados. Sem banco, sem servidor.
 - **Acesso:** servidor MCP local (stdio) — o mesmo para Claude Code, Codex, OpenCode,
-  Cursor, Devin CLI e GitHub Copilot (VS Code).
+  Cursor, Devin CLI e GitHub Copilot (VS Code) — **ou**, sem MCP, leitura direta
+  dos arquivos e CLI para busca e escrita.
+- **Projetos:** identificados pelo `origin` do git, via notas de projeto no acervo.
 - **Canal estático:** bloco gerado no `AGENTS.md` com as memórias críticas (*pinned*).
 - **Escrita:** `propose` grava na branch `inbox`; todos leem na hora como *pendente*.
 - **Curadoria:** `review` promove da inbox para a `main` — automática (particular) ou
