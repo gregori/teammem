@@ -3,7 +3,10 @@
 Dois modos, mesmo código:
 - "pr"     (trabalho): cria branch promote/* a partir da main só com os itens
             aprovados, faz push e abre PR. O merge continua humano.
-- "direct" (particular/CI): commit direto na main com status provisional.
+- "direct" (particular/CI): commit direto na main, sem `verified` humano.
+
+Nos dois modos a promoção regenera os índices OKF (`index.md`) e acrescenta
+as entradas ao `log.md`, na mesma branch/commit.
 
 A inbox nunca é mergeada inteira: a branch de promoção nasce da main e recebe
 só os arquivos escolhidos. Depois do merge, `gc` limpa a inbox.
@@ -17,9 +20,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import curator
-from .schema import parse
-from .store import GitError, Store, git
+from . import curator, okf
+from .projects import load_notes
+from .schema import RESERVED, human, parse
+from .store import GitError, Store, git, load_memories
 
 TRAILER = "Gerado por teammem review"
 
@@ -33,7 +37,8 @@ def in_flight(store: Store) -> set[str]:
     for ref in refs:
         changed = git("diff", "--name-only", f"origin/{store.cfg.main_branch}...{ref}",
                       cwd=d, check=False).split()
-        ids |= {Path(p).stem for p in changed if p.endswith(".md")}
+        ids |= {Path(p).stem for p in changed
+                if p.endswith(".md") and Path(p).name not in RESERVED}
     return ids
 
 
@@ -90,17 +95,20 @@ def promote(store: Store, ids: list[str], mode: str = "pr") -> dict:
     try:
         git("worktree", "add", "-b", branch, str(wt), f"origin/{cfg.main_branch}",
             cwd=cfg.main_dir)
-        today = dt.date.today().isoformat()
+        promoted = []
         for i in ids:
             m = parse((cfg.inbox_dir / by_id[i].inbox_path()).read_text(encoding="utf-8"))
-            if mode == "pr":
-                m.status, m.last_validated = "validated", today
-            else:
-                m.status = "provisional"
+            m.status = "stable"
+            if mode == "pr":  # o curador aprovou item a item: revisão humana (OKF §5.3)
+                m.verify(human(cfg.author))
             dest = wt / m.dest_path()
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(m.to_markdown(), encoding="utf-8")
             git("add", m.dest_path(), cwd=wt)
+            promoted.append(m)
+        okf.write_indexes(wt, load_memories(wt), load_notes(wt))
+        okf.prepend_log(wt, [okf.log_entry("Promoção", m) for m in promoted])
+        git("add", "-A", cwd=wt)
         title = f"memória: promove {len(ids)} item(ns) da inbox"
         body = "\n".join(f"- {i}: {by_id[i].title}" for i in ids) + f"\n\n{TRAILER}"
         store._commit(wt, f"{title}\n\n{body}")

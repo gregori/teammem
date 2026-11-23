@@ -14,7 +14,7 @@ descobertos no trabalho. A memória deve ser:
 
 - **Compartilhada** entre pessoas, projetos e harnesses;
 - **Curada**, com proveniência e revisão humana do que vira norma;
-- **Viva**, com envelhecimento (`review_by`), expiração e substituição (`supersedes`);
+- **Viva**, com envelhecimento (`stale_after`), expiração e substituição (`supersedes`);
 - **Segura**, sem segredos e sem virar vetor de prompt injection.
 
 **Fora de escopo:** estilo de código e procedimentos estáveis. Esses continuam
@@ -26,13 +26,16 @@ como skills e instruções versionadas nos próprios projetos.
 |---|---|---|
 | D1 | Fonte da verdade é um **repositório git de markdown** | Histórico, autoria, revisão e backup com a infraestrutura já aprovada; legível por humanos |
 | D2 | Sem banco nem servidor central | Para 4 pessoas, o git cobre tudo; a latência (merge + pull) é aceitável para aprendizados |
-| D3 | Acesso via **MCP local (stdio)** | Todos os harnesses do time rodam localmente e suportam MCP |
+| D3 | Acesso via **MCP local (stdio)**, opcional desde D11 | Todos os harnesses do time rodam localmente e suportam MCP |
 | D4 | **AGENTS.md** como canal estático, só com as memórias críticas | Denominador comum lido por todos os harnesses; o resto fica sob demanda via `search` |
 | D5 | Escrita na branch **`inbox`** (sem proteção) | Só a `main` é protegida; o aprendizado circula na hora como *pendente* |
 | D6 | Promoção **em lote**, com merge humano | Todo PR exige merge explícito, e não há conta de serviço: um clique por semana |
 | D7 | Curadoria **local**, na máquina do curador da semana | Sem conta de serviço, o CI não pode fazer merge; o curador usa as próprias credenciais |
 | D8 | Componente **separado** da orchestrated squad | Ciclo de vida e público próprios; a squad consome a memória como dependência |
 | D9 | Compartilhar a **spec**, não o código, entre a versão particular e a corporativa | Repositórios git públicos não são permitidos no trabalho; evita problemas de PI |
+| D10 | Acervo em formato **OKF v0.2** (Google Cloud), com extensões próprias | Formato aberto e mínimo; índices gerados permitem leitura sem ferramenta; a SPEC do teammem passa a cobrir só o processo |
+| D11 | **MCP opcional**: leitura pelos arquivos OKF, busca e escrita pela CLI | Uma configuração a menos por harness; todo harness do time roda shell. A escrita continua centralizada no `propose` |
+| D12 | Identidade de projeto pelo **`origin` normalizado**, com **nota de projeto** opcional (`remotes`, `aliases`) | Independe do nome da pasta; a nota dá nome legível, agrupa repositórios e torna renomeações uma edição de uma linha |
 
 ## 3. Restrições do ambiente corporativo
 
@@ -91,7 +94,7 @@ flowchart LR
 5. `teammem gc` remove da inbox o que foi promovido e o que expirou (90 dias).
 
 **Manutenção mensal**
-- `teammem stale` lista memórias com `review_by` vencido, que são revalidadas, atualizadas ou substituídas.
+- `teammem stale` lista memórias com `stale_after` vencido, que são revalidadas, atualizadas ou substituídas.
 
 ## 5. Harnesses do time e instalação
 
@@ -238,7 +241,7 @@ Revisão incremental: cada fase termina com uma revisão do time antes de seguir
 | Qualquer pessoa com acesso de escrita pode escrever na inbox | Tudo da inbox é servido como "não revisado", com peso menor |
 | Force-push apagando a inbox | O clone de cada membro serve de backup; proteger a inbox contra force-push, se a plataforma permitir sem exigir PR |
 | Inbox crescendo sem revisão | TTL de 90 dias + rodízio + idade do lote visível no `review` |
-| Memória desatualizada causando erro | `review_by`, `stale`, feedback (Fase 4), `supersedes` |
+| Memória desatualizada causando erro | `stale_after`, `stale`, feedback (Fase 4), `supersedes` |
 | AGENTS.md inchado | Teto de `pinned_max` com aviso no bloco gerado |
 | Formatos de config dos harnesses mudam | Instalador centralizado + `doctor` + validação a cada atualização |
 
@@ -264,6 +267,7 @@ Em ambas, os requisitos de distribuição são os mesmos:
 - [ ] Registry interno com proxy do PyPI (0.3).
 - [ ] A plataforma permite bloquear force-push na `inbox` sem exigir PR?
 - [ ] O time quer o hook de fim de sessão (Fase 3) ou só a skill `/learn`?
+- [ ] No trabalho: MCP ou modo sem MCP (D11)? O modo sem MCP depende de o Devin CLI e o Copilot executarem `teammem` sem pedir aprovação a cada chamada.
 
 ## Apêndice A — Comandos de referência
 
@@ -273,7 +277,8 @@ teammem init . --profile work
 
 # Instalar na máquina (cada dev, uma vez)
 teammem install --user --repo <url-git-interno-do-acervo> --name trabalho \
-  --source "teammem==0.1.0" --harness devin claude copilot
+  --source "teammem==0.2.0" --harness devin claude copilot
+# (sem MCP: acrescente --no-mcp)
 
 # Críticas de um projeto (só se houver pinned do projeto; commitar o AGENTS.md)
 teammem agents-md --repo <url> --name trabalho
@@ -292,6 +297,11 @@ teammem propose --repo <url> --title "..." --type gotcha --body "..."
 teammem review --repo <url>             # interativo → PR
 teammem review --repo <url> --list      # só lista
 teammem gc --repo <url>                 # após o merge
+
+# Identidade de projeto e conformidade
+teammem project                         # resolução do projeto + nota sugerida
+teammem validate .                      # no clone do acervo
+teammem index .                         # regenera os índices (ex.: após conflito)
 
 # Mensal
 teammem stale --repo <url>

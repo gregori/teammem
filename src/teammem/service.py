@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import curator, safety
+from . import curator, projects, safety
 from .config import Config
 from .index import Index
 from .schema import Memory, new_memory
@@ -31,19 +31,36 @@ class Service:
         self._index.ensure(self.store.all_memories, sig)
         return self._index
 
-    def _visible(self, m: Memory, project: str | None) -> bool:
-        return not (m.scope == "project" and project and m.project != project)
+    # ------------------------------------------------------------ projeto
+    def resolve_project(self) -> projects.Resolution:
+        """Identidade do projeto atual (override > remote > alias > pasta)."""
+        return projects.resolve(self.cfg.project, self.cfg.remote, self.cfg.folder,
+                                self.store.project_notes())
+
+    @property
+    def project(self) -> str | None:
+        return self.resolve_project().project
+
+    def project_keys(self, project: str | None = None) -> set[str]:
+        """Identidades de projeto visíveis: a pedida explicitamente ou as do projeto atual."""
+        if project:
+            return {projects.key(project) or ""}
+        return self.resolve_project().keys
+
+    @staticmethod
+    def _visible(m: Memory, keys: set[str]) -> bool:
+        return not (m.scope == "project" and keys and projects.key(m.project) not in keys)
 
     # ------------------------------------------------------------ leitura
     def list_index(self, scope: str | None = None, project: str | None = None,
                    include_inbox: bool = True) -> list[dict]:
         self.refresh()
-        project = project or self.cfg.project
+        keys = self.project_keys(project)
         mems = self.store.all_memories() if include_inbox else self.store.main_memories()
         return [
             m.summary()
             for m in mems
-            if self._visible(m, project) and (not scope or m.scope == scope)
+            if self._visible(m, keys) and (not scope or m.scope == scope)
         ]
 
     def read(self, ids: list[str]) -> list[dict]:
@@ -55,19 +72,19 @@ class Service:
     def search(self, query: str, scope: str | None = None, type: str | None = None,
                project: str | None = None, limit: int = 10) -> list[dict]:
         self.refresh()
-        return self.index.search(query, project=project or self.cfg.project, scope=scope,
+        return self.index.search(query, projects=self.project_keys(project), scope=scope,
                                  type=type, limit=limit)
 
     def pinned(self, project: str | None = None, kind: str = "all") -> list[Memory]:
         """kind: 'all' (amplas + do projeto), 'broad' (global/team/org) ou 'project'."""
         self.refresh()
-        project = project or self.cfg.project
+        keys = self.project_keys(project)
         out = []
         for m in self.store.main_memories():
             if not m.pinned:
                 continue
             if m.scope == "project":
-                if kind != "broad" and project and m.project == project:
+                if kind != "broad" and projects.key(m.project) in keys:
                     out.append(m)
             elif kind != "project":
                 out.append(m)
@@ -77,22 +94,22 @@ class Service:
     def propose(self, *, title: str, body: str, type: str, scope: str = "project",
                 project: str | None = None, source: str | None = None,
                 confidence: str = "medium", tags: list[str] | None = None,
-                pinned: bool = False) -> dict:
+                pinned: bool = False, description: str | None = None) -> dict:
         scan = safety.scan(f"{title}\n{body}")
         if not scan.ok:
             return {"status": "recusada", "motivos": scan.blocked}
         if scope == "project":
-            project = project or self.cfg.project
+            project = projects.key(project) or self.project
             if not project:
                 return {
                     "status": "recusada",
-                    "motivos": ["projeto atual não detectado (o MCP não foi iniciado dentro "
-                                "de um repositório git): informe `project` ou use outro scope"],
+                    "motivos": ["projeto atual não detectado (fora de um repositório git): "
+                                "informe `project` ou use outro scope"],
                 }
         mem = new_memory(
             title=title, body=body, type=type, scope=scope, project=project,
             author=self.cfg.author, source=source, confidence=confidence, tags=tags,
-            pinned=pinned,
+            pinned=pinned, description=description,
         )
         self.refresh()
         dup = curator.classify(mem, self.store.all_memories(), self.store.policy())

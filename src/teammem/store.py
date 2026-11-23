@@ -19,13 +19,33 @@ import time
 from pathlib import Path
 
 from .config import Config
-from .schema import Memory, SchemaError, parse
+from .projects import ProjectNote, load_notes
+from .schema import RESERVED, Memory, SchemaError, parse
 
 MEMORY_DIRS = ("global", "team", "org", "project")
 
 
 class GitError(RuntimeError):
     pass
+
+
+def load_memories(root: Path, subdirs: tuple[str, ...] = MEMORY_DIRS,
+                  origin: str = "main") -> list[Memory]:
+    """Lê as memórias de `root`, ignorando arquivos reservados do OKF e inválidos."""
+    mems: list[Memory] = []
+    for sub in subdirs:
+        base = root / sub
+        if not base.exists():
+            continue
+        for f in sorted(base.rglob("*.md")):
+            if f.name in RESERVED:
+                continue
+            rel = f.relative_to(root).as_posix()
+            try:
+                mems.append(parse(f.read_text(encoding="utf-8"), path=rel, origin=origin))
+            except (SchemaError, UnicodeDecodeError):
+                continue  # arquivo inválido não derruba a leitura
+    return mems
 
 
 def git(*args: str, cwd: Path | str | None = None, check: bool = True, timeout: int = 60) -> str:
@@ -126,25 +146,14 @@ class Store:
             return ""
 
     # ------------------------------------------------------------------ leitura
-    def _load_dir(self, root: Path, subdirs: tuple[str, ...], origin: str) -> list[Memory]:
-        mems: list[Memory] = []
-        for sub in subdirs:
-            base = root / sub
-            if not base.exists():
-                continue
-            for f in sorted(base.rglob("*.md")):
-                rel = f.relative_to(root).as_posix()
-                try:
-                    mems.append(parse(f.read_text(encoding="utf-8"), path=rel, origin=origin))
-                except (SchemaError, UnicodeDecodeError):
-                    continue  # arquivo inválido não derruba a leitura
-        return mems
-
     def main_memories(self) -> list[Memory]:
-        return self._load_dir(self.cfg.main_dir, MEMORY_DIRS, "main")
+        return load_memories(self.cfg.main_dir, MEMORY_DIRS, "main")
 
     def inbox_memories(self) -> list[Memory]:
-        return self._load_dir(self.cfg.inbox_dir, ("inbox",), "inbox")
+        return load_memories(self.cfg.inbox_dir, ("inbox",), "inbox")
+
+    def project_notes(self) -> list[ProjectNote]:
+        return load_notes(self.cfg.main_dir)
 
     def all_memories(self) -> list[Memory]:
         main = self.main_memories()

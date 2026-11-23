@@ -136,13 +136,77 @@ Se o harness iniciar o MCP fora de um repositório git, o projeto atual não é
 detectado. Nesse caso, o `propose` com escopo `project` é recusado com uma
 explicação: informe `project` ou use outro escopo.
 
-Pela CLI (exporte `TEAMMEM_REPO` e `TEAMMEM_NAME` para não repetir as flags):
+Pela CLI. Depois do primeiro uso, a CLI acha sozinha o acervo clonado em
+`~/.teammem/` (com mais de um acervo, use `--name`):
 
 ```bash
 tm search "retry http"
 tm list
 tm show <id>
+tm where                # projeto atual e caminhos do acervo local
+tm project              # como o projeto foi identificado + nota sugerida
 tm review --list        # o que está na inbox e como o curador classificou
-tm stale                # memórias com review_by vencido
+tm stale                # memórias com stale_after vencido
 tm doctor
 ```
+
+## 6. Modo sem MCP
+
+O acervo é um bundle [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+cada pasta tem um `index.md` gerado com links e descrições. Um agente consegue
+navegar por ele só lendo arquivos, e a CLI cobre busca e escrita. Assim, o MCP
+fica opcional:
+
+```bash
+uv tool install git+https://github.com/gregori/teammem   # `teammem` no PATH
+teammem install --user --no-mcp --repo git@github.com:gregori/minha-memoria.git \
+  --name pessoal --source git+https://github.com/gregori/teammem
+```
+
+O que muda em relação ao modo MCP:
+
+| | Com MCP | Sem MCP |
+|---|---|---|
+| Ler | tools `list_index`, `read` | arquivos a partir de `~/.teammem/<acervo>/main/index.md` |
+| Buscar | tool `search` | `teammem search` |
+| Propor | tool `propose` | `teammem propose` (a skill `/learn` usa o que houver) |
+| Sincronizar | automático, a cada chamada | a cada comando da CLI (`teammem sync` força) |
+| Instruções globais | uso das tools | caminho do clone + comandos da CLI |
+
+Nos dois modos, **toda escrita passa pelo `propose`**: só ele aplica as
+checagens de segredo e de prompt injection. As instruções dizem ao agente para
+nunca criar ou editar arquivos do acervo diretamente.
+
+Sem `teammem` no PATH, as instruções usam `uvx --from <source> teammem`, que
+funciona mas é mais lento.
+
+## 7. Identidade do projeto
+
+O projeto é identificado pelo `origin` do git (`github.com/gregori/proj-x` vira
+`github-com-gregori-proj-x`), então clones e worktrees com outros nomes caem no
+mesmo projeto. Sem `origin`, vale o nome da pasta.
+
+Para dar um nome legível, agrupar vários repositórios ou registrar aliases,
+crie uma **nota de projeto** no acervo, por PR:
+
+```bash
+cd ~/projetos/proj-x
+tm project          # mostra a resolução e a nota sugerida, com o remote
+```
+
+Salve a nota sugerida em `projects/<slug>.md` no seu clone do acervo, ajuste
+`title`, `remotes` e `aliases` e abra um PR. As memórias já gravadas pelo
+`origin` continuam visíveis depois da nota.
+
+## 8. Índices e conformidade
+
+Os `index.md` e o `log.md` são gerados na promoção. Para conferir ou
+regenerar num clone do acervo:
+
+```bash
+tm validate .       # conformidade OKF
+tm index .          # regenera os índices
+```
+
+Se um PR de promoção conflitar em `index.md`, rode `tm index .` no branch e
+faça o commit. No `log.md`, mantenha as entradas dos dois lados.
