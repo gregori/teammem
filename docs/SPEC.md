@@ -1,11 +1,11 @@
-# Especificação teammem (v2)
+# Especificação teammem (v1)
 
 Este documento é o **contrato** compartilhado entre implementações. A versão
 particular (este repositório) e a versão corporativa podem divergir no código,
 mas devem respeitar esta spec. Assim, memórias migram entre acervos copiando o
 arquivo, e skills e agentes falam com qualquer acervo.
 
-A partir da v2, o acervo é um **bundle [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)**
+O acervo é um **bundle [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)**
 (Open Knowledge Format). O OKF padroniza o **formato**; curadoria, inbox,
 identidade de projeto e checagens de segurança continuam sendo do teammem.
 
@@ -56,7 +56,7 @@ author: rodrigo
 confidence: high
 pinned: false
 created: '2026-10-18'
-schema_version: 2
+schema_version: 1
 ---
 
 Não envolva chamadas em `tenacity`: os retries se multiplicam e estouram o rate
@@ -81,19 +81,13 @@ limit do parceiro. Configure o retry no próprio cliente (`HttpClient(retries=�
 | `pinned` | teammem | não | `true` = vai para o canal estático (§7) |
 | `created` | teammem | sim | data ISO |
 | `supersedes` | teammem | não | ids que esta memória substitui |
-| `schema_version` | teammem | sim | `2` |
+| `schema_version` | teammem | sim | `1` |
 
 **Estado de curadoria (derivado, não gravado):** `pendente` (está na inbox),
 `validated` (tem `verified` com ator `human:`) ou `provisional` (na main, sem
 revisão humana).
 
 **Corpo:** curto (2–6 linhas), factual e acionável: o que acontece, por quê e o que fazer.
-
-**Compatibilidade v1:** leitores aceitam o formato v1 e convertem:
-`status: validated` + `last_validated` → `verified: [{by: human:<author>, at}]`;
-`status: provisional|validated` → `stable` (ou `draft` na inbox);
-`source` → `sources`; `review_by` → `stale_after`. `teammem migrate` reescreve
-um acervo v1 em v2.
 
 ### Destino na main
 
@@ -102,8 +96,9 @@ um acervo v1 em v2.
 
 ## 3. Identidade de projeto
 
-A identidade de um projeto é um **slug**. Toda comparação usa o slug dos dois
-lados (`API Pedidos`, `api-pedidos` e `api_pedidos` são o mesmo projeto).
+A identidade de um projeto é um **slug** (até 96 caracteres). Toda comparação
+usa o slug dos dois lados (`API Pedidos`, `api-pedidos` e `api_pedidos` são o
+mesmo projeto).
 
 **Nota de projeto** (`projects/<slug>.md`, na main, editada por PR):
 
@@ -129,12 +124,16 @@ esquema, credenciais, porta ou `.git` (`git@github.com:Zup/API.git` →
 1. override explícito (`--project` ou `TEAMMEM_PROJECT`);
 2. nota cujo `remotes` contém o `origin` normalizado do repositório atual;
 3. nota cujo slug ou `aliases` coincide com o nome da pasta git;
-4. slug do nome da pasta git;
-5. nenhum: `propose` com `scope=project` é recusado com explicação.
+4. slug do `origin` normalizado (`github.com/zup/api` → `github-com-zup-api`);
+5. slug do nome da pasta, só quando o repositório não tem `origin`;
+6. nenhum: `propose` com `scope=project` é recusado com explicação.
 
-Sem nota, o comportamento é o da v1 (pasta). A nota torna a identidade estável
-entre clones, worktrees e renomeações. `teammem project` mostra a resolução e
-sugere a nota.
+Sem nota, a identidade já é estável entre clones e worktrees, porque vem do
+`origin`. A nota acrescenta um nome legível, aliases e a lista de repositórios
+do projeto. Na **leitura**, um projeto com nota aceita memórias gravadas com o
+slug da nota, de qualquer `remotes` ou de qualquer `aliases`: criar a nota
+depois não esconde o que já foi registrado. Na **escrita**, usa-se o slug da
+nota. `teammem project` mostra a resolução e sugere a nota.
 
 ## 4. Índices e log (arquivos reservados do OKF)
 
@@ -251,6 +250,6 @@ O `CLAUDE.md` importa o `AGENTS.md` (`@AGENTS.md`), mantendo uma fonte única.
 ## 8. Versionamento
 
 - `schema_version` no frontmatter; mudanças incompatíveis incrementam a versão
-  e vêm com um comando de migração (`teammem migrate`, v1 → v2).
+  e vêm com um comando de migração.
 - O formato base acompanha o OKF declarado em `okf_version` no `index.md` raiz.
 - Os adaptadores dos harnesses devem fixar a versão do pacote (`teammem==X.Y.Z`).

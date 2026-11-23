@@ -6,11 +6,13 @@ O projeto atual é resolvido nesta ordem:
 2. nota de projeto (`projects/<slug>.md` no acervo) cujo `remotes` contém a URL
    normalizada do `origin` do repositório atual;
 3. nota de projeto cujo slug ou `aliases` coincide com o nome da pasta git;
-4. nome da pasta git (compatível com acervos anteriores às notas).
+4. URL normalizada do `origin` (estável entre clones e worktrees);
+5. nome da pasta git, só quando não há `origin`.
 
-A identidade é sempre o **slug** (ver `key`). Toda comparação de projeto usa
-`key()` dos dois lados, o que elimina a divergência entre o nome usado no
-filtro e o nome usado no caminho do arquivo.
+A identidade é sempre um **slug** (ver `key`), e toda comparação usa `key()`
+dos dois lados. Um projeto com nota também enxerga as memórias gravadas com
+qualquer um dos seus `remotes` ou `aliases` (`Resolution.keys`), então criar a
+nota depois não esconde o que já foi registrado.
 """
 
 from __future__ import annotations
@@ -22,18 +24,14 @@ from pathlib import Path
 
 import yaml
 
-from .schema import FM_RE, slugify
+from .schema import FM_RE, PROJECT_KEY_LEN, slugify
 
 PROJECTS_DIR = "projects"
 
 
 def key(project: str | None) -> str | None:
     """Forma canônica de um identificador de projeto."""
-    return slugify(project) if project else None
-
-
-def same(a: str | None, b: str | None) -> bool:
-    return bool(a and b) and key(a) == key(b)
+    return slugify(project, PROJECT_KEY_LEN) if project else None
 
 
 _SCP = re.compile(r"^(?:[\w.\-]+@)?([\w.\-]+):(?!/)(.+)$")  # git@host:owner/repo
@@ -147,14 +145,23 @@ def load_notes(root: Path) -> list[ProjectNote]:
 @dataclass
 class Resolution:
     project: str | None
-    how: str  # override | remote | alias | pasta | nenhum
+    how: str  # override | nota-remote | nota-alias | remote | pasta | nenhum
     remote: str | None = None
     folder: str | None = None
     note: str | None = None
+    keys: set[str] = field(default_factory=set)  # identidades aceitas na leitura
+
+    def __post_init__(self) -> None:
+        if self.project:
+            self.keys.add(self.project)
 
     def to_dict(self) -> dict:
         return {"projeto": self.project, "como": self.how, "remote": self.remote,
-                "pasta": self.folder, "nota": self.note}
+                "pasta": self.folder, "nota": self.note, "aceita": sorted(self.keys)}
+
+
+def _note_keys(n: ProjectNote) -> set[str]:
+    return {n.slug, *(k for k in (key(r) for r in n.remotes) if k), *n.aliases} - {""}
 
 
 def resolve(override: str | None, remote: str | None, folder: str | None,
@@ -164,19 +171,23 @@ def resolve(override: str | None, remote: str | None, folder: str | None,
     if remote:
         for n in notes:
             if remote in n.remotes:
-                return Resolution(n.slug, "remote", remote, folder, n.path)
+                return Resolution(n.slug, "nota-remote", remote, folder, n.path, _note_keys(n))
     fk = key(folder)
     if fk:
         for n in notes:
             if fk == n.slug or fk in n.aliases:
-                return Resolution(n.slug, "alias", remote, folder, n.path)
+                return Resolution(n.slug, "nota-alias", remote, folder, n.path, _note_keys(n))
+    if remote:
+        return Resolution(key(remote), "remote", remote, folder)
+    if fk:
         return Resolution(fk, "pasta", remote, folder)
     return Resolution(None, "nenhum", remote, folder)
 
 
 def suggest_note(res: Resolution) -> ProjectNote | None:
     """Nota sugerida para o repositório atual, quando ainda não há uma."""
-    if not res.project or res.how in ("remote", "override"):
+    if not res.project or res.how in ("nota-remote", "override"):
         return None
-    return ProjectNote(slug=res.project, title=res.folder or res.project,
+    slug = key(res.folder) or res.project
+    return ProjectNote(slug=slug, title=res.folder or slug,
                        remotes=[res.remote] if res.remote else [])

@@ -11,8 +11,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import __version__, agentsmd, config, curator, install, okf, projects, review
-from .schema import SchemaError, parse
-from .store import MEMORY_DIRS, load_memories
+from .store import load_memories
 
 
 def _out(data) -> None:
@@ -159,58 +158,6 @@ def cmd_validate(a):
     if not problems:
         print("✔ bundle OKF conforme")
     sys.exit(1 if problems else 0)
-
-
-def cmd_migrate(a):
-    """Converte um clone do acervo para o formato OKF v0.2 (schema 2).
-
-    Reescreve as memórias da main, cria notas de projeto para as pastas de
-    projeto sem nota, gera os índices e registra a migração no log.md.
-    Não faz commit: revise o diff e abra um PR.
-    """
-    from .schema import iso_datetime
-
-    root = _bundle(a.dir)
-    rewritten, failed = [], []
-    for sub in MEMORY_DIRS:
-        for f in sorted((root / sub).rglob("*.md")) if (root / sub).exists() else []:
-            if f.name in okf.RESERVED:
-                continue
-            rel = f.relative_to(root).as_posix()
-            try:
-                m = parse(f.read_text(encoding="utf-8"), path=rel)
-            except SchemaError as e:
-                failed.append(f"{rel}: {e}")
-                continue
-            if m.project:
-                m.project = projects.key(m.project)
-            new = m.to_markdown()
-            if new != f.read_text(encoding="utf-8"):
-                f.write_text(new, encoding="utf-8")
-                rewritten.append(rel)
-    notes = projects.load_notes(root)
-    have = {n.slug for n in notes}
-    created = []
-    for d in sorted((root / "project").glob("*/")) if (root / "project").exists() else []:
-        slug = projects.key(d.name)
-        if slug and slug not in have and any(x.name not in okf.RESERVED for x in d.glob("*.md")):
-            note = projects.ProjectNote(slug=slug, title=d.name)
-            target = root / projects.PROJECTS_DIR / f"{slug}.md"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(note.to_markdown(), encoding="utf-8")
-            created.append(target.relative_to(root).as_posix())
-    indexes = okf.write_indexes(root, load_memories(root), projects.load_notes(root))
-    if rewritten or created:
-        okf.prepend_log(root, [f"* **Migração**: acervo convertido para OKF v0.2 "
-                           f"({len(rewritten)} memória(s) reescrita(s), "
-                           f"{len(created)} nota(s) de projeto criada(s))"])
-    _out({"reescritas": rewritten, "notas_criadas": created, "indices": indexes,
-          "falhas": failed, "gerado_em": iso_datetime(),
-          "proximo_passo": "preencha `remotes` nas notas criadas, revise o diff e abra um PR"})
-
-
-def _harnesses(a) -> list[str]:
-    return list(install.HARNESSES) if a.harness == ["all"] else a.harness
 
 
 def _cli_for(source: str | None) -> str:
@@ -443,8 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     add("where", cmd_where, "caminhos do acervo e projeto atual (modo sem MCP)")
     add("project", cmd_project, "identidade do projeto atual e nota sugerida")
     for nm, fn, hp in (("index", cmd_index, "regenera os index.md de um clone do acervo"),
-                       ("validate", cmd_validate, "checa a conformidade OKF de um clone"),
-                       ("migrate", cmd_migrate, "converte um clone do acervo para OKF v0.2")):
+                       ("validate", cmd_validate, "checa a conformidade OKF de um clone")):
         sp = sub.add_parser(nm, help=hp)
         sp.add_argument("dir", nargs="?", default=".")
         sp.set_defaults(fn=fn)

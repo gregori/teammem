@@ -23,10 +23,11 @@ def remote(tmp_path: Path) -> Path:
     )
     (seed / "team").mkdir()
     (seed / "team" / "2026-01-01-ana-migrations.md").write_text(
-        "---\nid: 2026-01-01-ana-migrations\ntitle: Nunca rode migrations em homologação\n"
-        "type: convention\nscope: team\nauthor: ana\nstatus: validated\npinned: true\n"
-        "created: '2026-01-01'\n---\n\nUse o Postgres do docker compose; o .env padrão aponta "
-        "para homologação compartilhada.\n"
+        "---\ntype: convention\ntitle: Nunca rode migrations em homologação\n"
+        "status: stable\nverified:\n- by: human:ana\n  at: '2026-01-02T00:00:00+00:00'\n"
+        "id: 2026-01-01-ana-migrations\nscope: team\nauthor: ana\npinned: true\n"
+        "created: '2026-01-01'\nschema_version: 1\n---\n\nUse o Postgres do docker compose; "
+        "o .env padrão aponta para homologação compartilhada.\n"
     )
     sh("git", "add", "-A", cwd=seed)
     sh("git", "-c", "user.name=seed", "-c", "user.email=s@x", "commit", "-qm", "seed", cwd=seed)

@@ -6,12 +6,14 @@ import pytest
 from teammem import agentsmd, cli, config, okf, projects, review
 from teammem.projects import ProjectNote, normalize_remote, resolve
 from teammem.schema import parse
-from teammem.store import git, load_memories
+from teammem.store import git
 
-V1 = (
-    "---\nid: 2026-01-02-ana-retry\ntitle: Cliente HTTP já faz retry\ntype: gotcha\n"
-    "scope: project\nproject: API Pedidos\nauthor: ana\nsource: https://git/x/pull/1\n"
-    "status: validated\nlast_validated: '2026-02-01'\nreview_by: '2026-08-01'\n"
+RAW = (  # memória com o nome do projeto "cru", como um humano escreveria à mão
+    "---\ntype: gotcha\ntitle: Cliente HTTP já faz retry\nstatus: stable\n"
+    "sources:\n- resource: https://git/x/pull/1\n"
+    "verified:\n  by: human:ana\n  at: '2026-02-01T00:00:00+00:00'\n"
+    "stale_after: '2026-08-01T00:00:00+00:00'\n"
+    "id: 2026-01-02-ana-retry\nscope: project\nproject: API Pedidos\nauthor: ana\n"
     "created: '2026-01-02'\nschema_version: 1\n---\n\nNão use tenacity. Configure no cliente.\n"
 )
 
@@ -33,33 +35,34 @@ def test_resolve_order():
                          remotes=["github.com/zup/api-pedidos"], aliases=["pedidos"])]
     assert resolve("Outro Nome", "github.com/zup/api-pedidos", "x", notes).how == "override"
     r = resolve(None, "github.com/zup/api-pedidos", "clone-qualquer", notes)
-    assert (r.project, r.how) == ("api-pedidos", "remote")
+    assert (r.project, r.how) == ("api-pedidos", "nota-remote")
+    assert "github-com-zup-api-pedidos" in r.keys and "pedidos" in r.keys
     r = resolve(None, "github.com/fork/api", "pedidos", notes)
-    assert (r.project, r.how) == ("api-pedidos", "alias")
+    assert (r.project, r.how) == ("api-pedidos", "nota-alias")
+    r = resolve(None, "github.com/gregori/Proj-X", "pasta-qualquer", notes)
+    assert (r.project, r.how) == ("github-com-gregori-proj-x", "remote")
     r = resolve(None, None, "Minha Pasta", notes)
     assert (r.project, r.how) == ("minha-pasta", "pasta")
     assert resolve(None, None, None, notes).project is None
 
 
-def test_parse_v1_converts_to_okf():
-    m = parse(V1, path="project/api-pedidos/2026-01-02-ana-retry.md")
+def test_parse_okf_fields():
+    m = parse(RAW, path="project/api-pedidos/2026-01-02-ana-retry.md")
     assert m.status == "stable" and m.validated and m.curation == "validated"
-    assert m.verified == [{"by": "human:ana", "at": "2026-02-01T00:00:00+00:00"}]
+    assert m.verified == [{"by": "human:ana", "at": "2026-02-01T00:00:00+00:00"}]  # mapa único
     assert m.sources == ["https://git/x/pull/1"]
-    assert m.stale_after == "2026-08-01T00:00:00+00:00"
     fm = parse(m.to_markdown()).frontmatter()
     assert list(fm)[:3] == ["type", "title", "description"]
     assert fm["description"] == "Não use tenacity."
-    assert "review_by" not in fm and "source" not in fm
 
 
 def test_project_key_mismatch_is_fixed(alice):
     """Memória gravada com o nome cru ('API Pedidos') aparece para o slug."""
     alice.refresh(force=True)
-    mem = parse(V1)
+    mem = parse(RAW)
     path = alice.cfg.main_dir / mem.dest_path()
     path.parent.mkdir(parents=True)
-    path.write_text(V1)
+    path.write_text(RAW)
     alice.cfg.project = "api-pedidos"
     alice._index = None
     assert any(i["id"] == mem.id for i in alice.list_index())
@@ -77,7 +80,7 @@ def test_identity_by_remote_note(alice, remote, tmp_path):
     subprocess.run(["git", "push", "-q", "origin", "main"], cwd=seed, check=True)
     alice.cfg.project, alice.cfg.remote, alice.cfg.folder = None, "github.com/zup/api-pedidos", "x"
     alice.refresh(force=True)
-    assert alice.resolve_project().to_dict()["como"] == "remote"
+    assert alice.resolve_project().to_dict()["como"] == "nota-remote"
     r = alice.propose(title="Paginação por cursor", body="Offset estoura.", type="pattern")
     assert r["status"] == "publicada"
     assert alice.store.inbox_memories()[0].project == "pedidos"
@@ -98,7 +101,6 @@ def test_promotion_writes_okf_files(alice):
     assert "não revisada" in proj_index
     log = (main / "log.md").read_text()
     assert "**Promoção**: [Lib X quebra com fontes CID]" in log
-    # o seed do conftest tem uma memória v1: o bundle continua conforme
     assert okf.validate_bundle(main) == []
 
     res = review.promote(alice.store, [by_title["Escolhemos Postgres"]], mode="pr")
@@ -124,21 +126,19 @@ def test_log_groups_by_date(tmp_path):
     assert okf.validate_bundle(tmp_path) == []
 
 
-def test_migrate_v1_bundle(tmp_path, capsys):
-    root = tmp_path / "acervo"
-    (root / "project" / "API Pedidos").mkdir(parents=True)
-    (root / "project" / "API Pedidos" / "2026-01-02-ana-retry.md").write_text(V1)
-    (root / "README.md").write_text("# acervo\n")
-    cli.main(["migrate", str(root)])
-    assert okf.validate_bundle(root) == []
-    note = projects.load_notes(root)
-    assert [n.slug for n in note] == ["api-pedidos"]
-    m = load_memories(root)[0]
-    assert m.project == "api-pedidos" and m.validated
-    assert (root / "index.md").exists() and "Migração" in (root / "log.md").read_text()
-    log_before = (root / "log.md").read_text()
-    cli.main(["migrate", str(root)])  # idempotente
-    assert (root / "log.md").read_text() == log_before
+def test_note_created_later_keeps_memories_visible(alice):
+    """Sem nota, o projeto é o remote; criar a nota depois não esconde nada."""
+    alice.cfg.project, alice.cfg.remote, alice.cfg.folder = None, "github.com/zup/api", "api"
+    alice.refresh(force=True)
+    r = alice.propose(title="Fila exige idempotência", body="Mensagens repetem.", type="gotcha")
+    mid = r["id"]
+    assert alice.store.inbox_memories()[0].project == "github-com-zup-api"
+    notes_dir = alice.cfg.main_dir / "projects"
+    notes_dir.mkdir()
+    (notes_dir / "api.md").write_text(ProjectNote(
+        slug="api", title="API", remotes=["github.com/zup/api"]).to_markdown())
+    assert alice.project == "api"
+    assert any(i["id"] == mid for i in alice.list_index())
 
 
 def test_init_is_conformant(tmp_path):

@@ -14,7 +14,7 @@ descobertos no trabalho. A memória deve ser:
 
 - **Compartilhada** entre pessoas, projetos e harnesses;
 - **Curada**, com proveniência e revisão humana do que vira norma;
-- **Viva**, com envelhecimento (`review_by`), expiração e substituição (`supersedes`);
+- **Viva**, com envelhecimento (`stale_after`), expiração e substituição (`supersedes`);
 - **Segura**, sem segredos e sem virar vetor de prompt injection.
 
 **Fora de escopo:** estilo de código e procedimentos estáveis. Esses continuam
@@ -35,7 +35,7 @@ como skills e instruções versionadas nos próprios projetos.
 | D9 | Compartilhar a **spec**, não o código, entre a versão particular e a corporativa | Repositórios git públicos não são permitidos no trabalho; evita problemas de PI |
 | D10 | Acervo em formato **OKF v0.2** (Google Cloud), com extensões próprias | Formato aberto e mínimo; índices gerados permitem leitura sem ferramenta; a SPEC do teammem passa a cobrir só o processo |
 | D11 | **MCP opcional**: leitura pelos arquivos OKF, busca e escrita pela CLI | Uma configuração a menos por harness; todo harness do time roda shell. A escrita continua centralizada no `propose` |
-| D12 | Identidade de projeto por **nota de projeto** com `remotes` normalizados | Independe do nome da pasta; renomear repositório vira editar uma linha; sem nota, vale a pasta (compatível) |
+| D12 | Identidade de projeto pelo **`origin` normalizado**, com **nota de projeto** opcional (`remotes`, `aliases`) | Independe do nome da pasta; a nota dá nome legível, agrupa repositórios e torna renomeações uma edição de uma linha |
 
 ## 3. Restrições do ambiente corporativo
 
@@ -94,7 +94,7 @@ flowchart LR
 5. `teammem gc` remove da inbox o que foi promovido e o que expirou (90 dias).
 
 **Manutenção mensal**
-- `teammem stale` lista memórias com `review_by` vencido, que são revalidadas, atualizadas ou substituídas.
+- `teammem stale` lista memórias com `stale_after` vencido, que são revalidadas, atualizadas ou substituídas.
 
 ## 5. Harnesses do time e instalação
 
@@ -241,7 +241,7 @@ Revisão incremental: cada fase termina com uma revisão do time antes de seguir
 | Qualquer pessoa com acesso de escrita pode escrever na inbox | Tudo da inbox é servido como "não revisado", com peso menor |
 | Force-push apagando a inbox | O clone de cada membro serve de backup; proteger a inbox contra force-push, se a plataforma permitir sem exigir PR |
 | Inbox crescendo sem revisão | TTL de 90 dias + rodízio + idade do lote visível no `review` |
-| Memória desatualizada causando erro | `review_by`, `stale`, feedback (Fase 4), `supersedes` |
+| Memória desatualizada causando erro | `stale_after`, `stale`, feedback (Fase 4), `supersedes` |
 | AGENTS.md inchado | Teto de `pinned_max` com aviso no bloco gerado |
 | Formatos de config dos harnesses mudam | Instalador centralizado + `doctor` + validação a cada atualização |
 

@@ -66,13 +66,13 @@ class Index:
         self,
         query: str,
         *,
-        project: str | None = None,
+        projects: set[str] | None = None,
         scope: str | None = None,
         type: str | None = None,
         limit: int = 10,
     ) -> list[dict]:
         fts = self._fts_query(query)
-        project = key(project)
+        projects = {p for p in (projects or set()) if p}
         if not fts:
             return []
         rows = self.db.execute(
@@ -87,14 +87,14 @@ class Index:
             if type and json.loads(data)["type"] != type:
                 continue
             # escopo project só aparece para o próprio projeto (ou sem filtro de projeto)
-            if sc == "project" and project and proj != project:
+            if sc == "project" and projects and proj not in projects:
                 continue
             rank = -score  # bm25: menor é melhor
             if origin == "inbox":
                 rank *= 0.6
             elif status == "provisional":
                 rank *= 0.8
-            if project and proj == project:
+            if proj and proj in projects:
                 rank *= 1.3
             results.append((rank, data))
         results.sort(key=lambda r: -r[0])

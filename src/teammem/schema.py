@@ -4,9 +4,6 @@ Ver docs/SPEC.md. Campos do OKF (`type`, `title`, `description`, `tags`,
 `status`, `sources`, `verified`, `stale_after`) seguem a spec; os demais
 (`id`, `scope`, `project`, `author`, `confidence`, `pinned`, `created`,
 `supersedes`, `schema_version`) são extensões do teammem, permitidas pelo OKF.
-
-A leitura aceita também o formato v1 (`status: provisional|validated`,
-`source`, `review_by`, `last_validated`) e o converte em memória.
 """
 
 from __future__ import annotations
@@ -27,6 +24,7 @@ SCOPES = ("global", "team", "org", "project")
 CONFIDENCE = ("low", "medium", "high")
 STATUS = ("draft", "stable", "deprecated")  # valores do OKF
 RESERVED = ("index.md", "log.md")  # nomes reservados pelo OKF
+PROJECT_KEY_LEN = 96  # slugs de projeto podem vir de URLs (host-dono-repo)
 
 FM_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
 
@@ -139,7 +137,7 @@ class Memory:
     def dest_path(self) -> str:
         """Caminho da memória no acervo (branch main)."""
         if self.scope == "project":
-            return f"project/{slugify(self.project or '')}/{self.id}.md"
+            return f"project/{slugify(self.project or '', PROJECT_KEY_LEN)}/{self.id}.md"
         return f"{self.scope}/{self.id}.md"
 
     def inbox_path(self) -> str:
@@ -206,8 +204,6 @@ def _sources(fm: dict) -> list[str]:
             out.append(str(s["resource"]))
         elif isinstance(s, str):
             out.append(s)
-    if fm.get("source"):  # v1
-        out.append(str(fm["source"]))
     return list(dict.fromkeys(out))
 
 
@@ -215,12 +211,8 @@ def _verified(fm: dict) -> list[dict]:
     v = fm.get("verified")
     if isinstance(v, dict):  # OKF: mapa único = lista de um elemento
         v = [v]
-    out = [{"by": str(x.get("by")), "at": str(x.get("at"))}
-           for x in v or [] if isinstance(x, dict) and x.get("by")]
-    if fm.get("status") == "validated" and not out:  # v1
-        out.append({"by": human(fm.get("author")),
-                    "at": iso_datetime(fm.get("last_validated") or fm.get("created") or today())})
-    return out
+    return [{"by": str(x.get("by")), "at": str(x.get("at"))}
+            for x in v or [] if isinstance(x, dict) and x.get("by")]
 
 
 def parse(text: str, path: str | None = None, origin: str = "main") -> Memory:
@@ -239,9 +231,6 @@ def parse(text: str, path: str | None = None, origin: str = "main") -> Memory:
         return None if v is None else str(v)
 
     status = s("status") or "stable"  # OKF: ausente = stable
-    if status in ("provisional", "validated"):  # v1
-        status = "draft" if origin == "inbox" else "stable"
-    stale = s("stale_after") or (iso_datetime(s("review_by")) if s("review_by") else None)
     body = m.group(2).strip()
 
     mem = Memory(
@@ -260,7 +249,7 @@ def parse(text: str, path: str | None = None, origin: str = "main") -> Memory:
         pinned=bool(fm.get("pinned", False)),
         tags=_str_list(fm.get("tags")),
         created=s("created") or today(),
-        stale_after=stale,
+        stale_after=s("stale_after"),
         supersedes=_str_list(fm.get("supersedes")),
         schema_version=int(fm.get("schema_version", SCHEMA_VERSION)),
         path=path,

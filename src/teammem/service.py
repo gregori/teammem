@@ -41,19 +41,26 @@ class Service:
     def project(self) -> str | None:
         return self.resolve_project().project
 
-    def _visible(self, m: Memory, project: str | None) -> bool:
-        return not (m.scope == "project" and project and not projects.same(m.project, project))
+    def project_keys(self, project: str | None = None) -> set[str]:
+        """Identidades de projeto visíveis: a pedida explicitamente ou as do projeto atual."""
+        if project:
+            return {projects.key(project) or ""}
+        return self.resolve_project().keys
+
+    @staticmethod
+    def _visible(m: Memory, keys: set[str]) -> bool:
+        return not (m.scope == "project" and keys and projects.key(m.project) not in keys)
 
     # ------------------------------------------------------------ leitura
     def list_index(self, scope: str | None = None, project: str | None = None,
                    include_inbox: bool = True) -> list[dict]:
         self.refresh()
-        project = project or self.project
+        keys = self.project_keys(project)
         mems = self.store.all_memories() if include_inbox else self.store.main_memories()
         return [
             m.summary()
             for m in mems
-            if self._visible(m, project) and (not scope or m.scope == scope)
+            if self._visible(m, keys) and (not scope or m.scope == scope)
         ]
 
     def read(self, ids: list[str]) -> list[dict]:
@@ -65,19 +72,19 @@ class Service:
     def search(self, query: str, scope: str | None = None, type: str | None = None,
                project: str | None = None, limit: int = 10) -> list[dict]:
         self.refresh()
-        return self.index.search(query, project=project or self.project, scope=scope,
+        return self.index.search(query, projects=self.project_keys(project), scope=scope,
                                  type=type, limit=limit)
 
     def pinned(self, project: str | None = None, kind: str = "all") -> list[Memory]:
         """kind: 'all' (amplas + do projeto), 'broad' (global/team/org) ou 'project'."""
         self.refresh()
-        project = project or self.project
+        keys = self.project_keys(project)
         out = []
         for m in self.store.main_memories():
             if not m.pinned:
                 continue
             if m.scope == "project":
-                if kind != "broad" and projects.same(m.project, project):
+                if kind != "broad" and projects.key(m.project) in keys:
                     out.append(m)
             elif kind != "project":
                 out.append(m)

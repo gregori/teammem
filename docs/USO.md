@@ -182,29 +182,31 @@ funciona mas é mais lento.
 
 ## 7. Identidade do projeto
 
-Por padrão, o projeto é o nome da pasta git (como na v1). Para que clones e
-worktrees com outros nomes achem o mesmo projeto, crie uma **nota de projeto**
-no acervo, por PR:
+O projeto é identificado pelo `origin` do git (`github.com/gregori/proj-x` vira
+`github-com-gregori-proj-x`), então clones e worktrees com outros nomes caem no
+mesmo projeto. Sem `origin`, vale o nome da pasta.
+
+Para dar um nome legível, agrupar vários repositórios ou registrar aliases,
+crie uma **nota de projeto** no acervo, por PR:
 
 ```bash
-cd ~/projetos/api-pedidos
+cd ~/projetos/proj-x
 tm project          # mostra a resolução e a nota sugerida, com o remote
 ```
 
-Salve a nota sugerida em `projects/<slug>.md` no seu clone do acervo,
-complete `remotes` e `aliases` e abra um PR. A partir daí, o projeto é
-encontrado pelo `origin`, independentemente do nome da pasta.
+Salve a nota sugerida em `projects/<slug>.md` no seu clone do acervo, ajuste
+`title`, `remotes` e `aliases` e abra um PR. As memórias já gravadas pelo
+`origin` continuam visíveis depois da nota.
 
-## 8. Migrar um acervo v1 para OKF
+## 8. Índices e conformidade
+
+Os `index.md` e o `log.md` são gerados na promoção. Para conferir ou
+regenerar num clone do acervo:
 
 ```bash
-cd minha-memoria            # seu clone do acervo, na main
-tm migrate .                # reescreve as memórias, cria notas de projeto e índices
-tm validate .               # confere a conformidade OKF
-git checkout -b migra-okf && git add -A && git commit -m "acervo: migra para OKF v0.2"
-gh pr create --fill
+tm validate .       # conformidade OKF
+tm index .          # regenera os índices
 ```
 
-Depois do merge, preencha `remotes` nas notas criadas. Se um PR de promoção
-conflitar em `index.md`, rode `tm index .` no branch e faça o commit. No
-`log.md`, mantenha as entradas dos dois lados.
+Se um PR de promoção conflitar em `index.md`, rode `tm index .` no branch e
+faça o commit. No `log.md`, mantenha as entradas dos dois lados.

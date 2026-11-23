@@ -21,7 +21,8 @@ import yaml
 
 from . import OKF_VERSION
 from .projects import PROJECTS_DIR, ProjectNote
-from .schema import FM_RE, RESERVED, TYPES, Memory, derive_description, slugify
+from .projects import key
+from .schema import FM_RE, RESERVED, TYPES, Memory, derive_description
 
 SCOPE_TITLES = {"global": "Global", "team": "Time", "org": "Organização",
                 "project": "Projetos"}
@@ -79,7 +80,7 @@ def render_indexes(memories: list[Memory], notes: list[ProjectNote]) -> dict[str
         by_scope[m.scope].append(m)
     by_project: dict[str, list[Memory]] = defaultdict(list)
     for m in by_scope.get("project", []):
-        by_project[slugify(m.project or "")].append(m)
+        by_project[key(m.project) or ""].append(m)
     note_by_slug = {n.slug: n for n in notes}
     out: dict[str, str] = {}
 
