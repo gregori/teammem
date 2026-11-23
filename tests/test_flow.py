@@ -8,7 +8,9 @@ def test_schema_roundtrip():
     m = new_memory(title="Cliente HTTP já faz retry", body="Não use tenacity.",
                    type="gotcha", scope="project", project="api", author="ana")
     back = parse(m.to_markdown())
-    assert back.id == m.id and back.project == "api" and back.status == "provisional"
+    assert back.id == m.id and back.project == "api" and back.status == "draft"
+    assert back.curation == "provisional" and not back.validated
+    assert back.description == "Não use tenacity." and back.stale_after.endswith("+00:00")
     assert m.dest_path() == f"project/api/{m.id}.md"
     with pytest.raises(SchemaError):
         new_memory(title="x", body="y", type="gotcha", scope="project")  # sem project
@@ -67,7 +69,8 @@ def test_review_tiers_and_promotion_direct(alice, bob):
     assert res["status"] == "promovidas na main"
     bob.refresh(force=True)
     promoted = {m.id: m for m in bob.store.main_memories()}
-    assert promoted[auto_id].status == "provisional"
+    assert promoted[auto_id].status == "stable"
+    assert promoted[auto_id].curation == "provisional"  # direto: sem verified humano
     assert promoted[auto_id].path == f"project/api/{auto_id}.md"
 
     gc = review.gc(bob.store)

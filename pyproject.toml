@@ -1,7 +1,7 @@
 [project]
 name = "teammem"
-version = "0.1.0"
-description = "Memória compartilhada multi-projeto e multi-harness para agentes de IA, versionada em git e servida via MCP."
+version = "0.2.0"
+description = "Memória compartilhada multi-projeto e multi-harness para agentes de IA, versionada em git em formato OKF, via MCP ou CLI."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

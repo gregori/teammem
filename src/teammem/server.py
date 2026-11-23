@@ -58,15 +58,24 @@ def build(cfg: Config) -> MCPServer:
         confidence: Literal["low", "medium", "high"] = "medium",
         tags: list[str] | None = None,
         pinned: bool = False,
+        description: str | None = None,
     ) -> dict:
         """Propõe uma memória nova. Vai para a inbox (pendente de curadoria).
 
         Escreva curto e factual: o que acontece, por quê, o que fazer. Inclua a
         fonte (PR, issue, arquivo). pinned=True só para algo que o agente erraria
-        sem ter motivo para buscar (custa contexto em toda sessão).
+        sem ter motivo para buscar (custa contexto em toda sessão). description:
+        uma linha usada nos índices (padrão: primeira frase do corpo).
         """
         return svc.propose(title=title, body=body, type=type, scope=scope, project=project,
-                           source=source, confidence=confidence, tags=tags, pinned=pinned)
+                           source=source, confidence=confidence, tags=tags, pinned=pinned,
+                           description=description)
+
+    @mcp.tool()
+    def where() -> dict:
+        """Projeto atual (e como foi identificado) e caminho local do acervo OKF."""
+        return {"projeto": svc.resolve_project().to_dict(),
+                "index": str(cfg.main_dir / "index.md")}
 
     @mcp.tool()
     def review_pending() -> list[dict]:

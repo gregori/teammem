@@ -8,6 +8,7 @@ import re
 import sqlite3
 from pathlib import Path
 
+from .projects import key
 from .schema import Memory
 
 _SCHEMA = """
@@ -39,8 +40,9 @@ class Index:
                 "INSERT INTO mem VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 [
                     (
-                        m.id, m.title, m.body, " ".join(m.tags), m.type, m.scope,
-                        m.project or "", m.status, m.origin, int(m.pinned),
+                        m.id, f"{m.title} {m.description}", m.body, " ".join(m.tags),
+                        m.type, m.scope, key(m.project) or "", m.curation, m.origin,
+                        int(m.pinned),
                         json.dumps(m.to_dict(), ensure_ascii=False),
                     )
                     for m in memories
@@ -48,7 +50,10 @@ class Index:
             )
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('sig', ?)", (sig,))
 
+    FORMAT = "okf2"  # muda quando o conteúdo indexado muda: força reconstrução
+
     def ensure(self, memories_fn, sig: str) -> None:
+        sig = f"{self.FORMAT}:{sig}"
         if self.signature() != sig:
             self.rebuild(memories_fn(), sig)
 
@@ -67,6 +72,7 @@ class Index:
         limit: int = 10,
     ) -> list[dict]:
         fts = self._fts_query(query)
+        project = key(project)
         if not fts:
             return []
         rows = self.db.execute(

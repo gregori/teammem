@@ -28,20 +28,23 @@ def _repo_name(repo: str) -> str:
     return re.sub(r"\.git$", "", name) or "memory"
 
 
-def detect_project(cwd: str | os.PathLike | None = None) -> str | None:
-    """Nome do projeto atual = nome da pasta raiz do git em cwd."""
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            cwd=cwd or os.getcwd(),
-            timeout=5,
-        )
-        top = out.stdout.strip()
-        return Path(top).name if top else None
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+def discover(home: Path) -> dict[str, str]:
+    """Acervos já clonados em `home`: nome -> URL do origin.
+
+    Permite usar a CLI sem `--repo` depois do primeiro uso (modo sem MCP)."""
+    found: dict[str, str] = {}
+    if not home.exists():
+        return found
+    for d in sorted(home.iterdir()):
+        if (d / "main" / ".git").exists():
+            try:
+                out = subprocess.run(["git", "config", "--get", "remote.origin.url"],
+                                     cwd=d / "main", capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if out.stdout.strip():
+                found[d.name] = out.stdout.strip()
+    return found
 
 
 @dataclass
@@ -50,7 +53,9 @@ class Config:
     name: str
     home: Path
     author: str | None
-    project: str | None
+    project: str | None  # override explícito; sem ele, a identidade é resolvida (projects.py)
+    remote: str | None = None  # origin normalizado do repositório atual
+    folder: str | None = None  # nome da pasta git atual
     main_branch: str = "main"
     inbox_branch: str = "inbox"
     sync_seconds: int = 600
@@ -79,18 +84,31 @@ def load(
     author: str | None = None,
     project: str | None = None,
 ) -> Config:
+    from .projects import detect_folder, detect_remote
+
+    home_dir = Path(home or os.environ.get("TEAMMEM_HOME") or Path.home() / ".teammem").expanduser()
     repo = repo or os.environ.get("TEAMMEM_REPO")
+    name = name or os.environ.get("TEAMMEM_NAME")
     if not repo:
-        raise SystemExit(
-            "Repositório de memórias não configurado: use --repo ou TEAMMEM_REPO "
-            "(URL git ou caminho local)."
-        )
+        known = discover(home_dir)
+        if name and name in known:
+            repo = known[name]
+        elif not name and len(known) == 1:
+            name, repo = next(iter(known.items()))
+        else:
+            hint = (f" Acervos encontrados: {', '.join(known)} (use --name)." if known else "")
+            raise SystemExit(
+                "Repositório de memórias não configurado: use --repo ou TEAMMEM_REPO "
+                f"(URL git ou caminho local).{hint}"
+            )
     return Config(
         repo=repo,
-        name=name or os.environ.get("TEAMMEM_NAME") or _repo_name(repo),
-        home=Path(home or os.environ.get("TEAMMEM_HOME") or Path.home() / ".teammem").expanduser(),
+        name=name or _repo_name(repo),
+        home=home_dir,
         author=author or os.environ.get("TEAMMEM_AUTHOR") or _git_config("user.name"),
-        project=project or os.environ.get("TEAMMEM_PROJECT") or detect_project(),
+        project=project or os.environ.get("TEAMMEM_PROJECT"),
+        remote=detect_remote(),
+        folder=detect_folder(),
         main_branch=os.environ.get("TEAMMEM_MAIN_BRANCH", "main"),
         inbox_branch=os.environ.get("TEAMMEM_INBOX_BRANCH", "inbox"),
         sync_seconds=int(os.environ.get("TEAMMEM_SYNC_SECONDS", "600")),

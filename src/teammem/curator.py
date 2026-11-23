@@ -103,10 +103,11 @@ def expired(mem: Memory, ttl_days: int, today: dt.date | None = None) -> bool:
 
 
 def stale(mem: Memory, today: dt.date | None = None) -> bool:
+    """OKF: um conceito está obsoleto quando now >= stale_after."""
     today = today or dt.date.today()
-    if not mem.review_by:
+    if not mem.stale_after:
         return False
     try:
-        return dt.date.fromisoformat(mem.review_by) < today
+        return dt.date.fromisoformat(mem.stale_after[:10]) <= today
     except ValueError:
         return False
